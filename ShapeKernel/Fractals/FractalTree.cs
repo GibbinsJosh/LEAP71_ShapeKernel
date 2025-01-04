@@ -48,6 +48,14 @@ namespace Leap71.ShapeKernel
             _maxDivergenceAngle = (float)(maxDivergenceAngle * Math.PI / 180); // Angle converted to radians
             _includeLeaves = includeLeaves;
             _structuredTree = structuredTree;
+
+            if (_structuredTree) // Override probabilities
+            {
+                _branchProbability = 1.0f; // Probability of adding a branch
+                _lengthRandomnessFactor = 0f; // Randomness factor for branch lengths
+                _rotationRandomnessFactor = 0f; // Randomness factor for branch rotations
+                _divergenceRandomnessFactor = 0f; // Randomness factor for branch divergence
+            }
         }
 
         public override Voxels voxConstruct()
@@ -86,6 +94,8 @@ namespace Leap71.ShapeKernel
 
             // Base direction for branch spreading
             Vector3 baseDirection = Vector3.Normalize(end - start) * length;
+            // Use a fixed axis for structured trees
+            Vector3 rotationAxis = FindOrthogonalVector(_growthDirection);
 
             // Generate new branches
             for (int currentBranch = 0; currentBranch < _maxBranchAttempts; currentBranch++)
@@ -93,17 +103,15 @@ namespace Leap71.ShapeKernel
                 // Check branch generation probability
                 if (random.NextDouble() >= _branchProbability) continue;
 
+                // if not _structuredTree, apply randomness to the angle
+                if (!_structuredTree)
+                {
+                    rotationAxis = Vector3.Cross(_growthDirection, Vector3.UnitX + (float)random.NextDouble() * Vector3.UnitY + (float)random.NextDouble() * Vector3.UnitZ);
+                    rotationAxis = Vector3.Normalize(rotationAxis);
+                }
+
                 // Calculate evenly spaced angle based on branch index
                 float spacingAngle = currentBranch * 2f * MathF.PI / _maxBranchAttempts;
-
-                // Generate a rotation axis perpendicular to the base direction
-                Vector3 rotationAxis = _structuredTree ? Vector3.UnitY : Vector3.Cross(baseDirection, Vector3.Normalize(new Vector3(
-                    (float)random.NextDouble(),
-                    (float)random.NextDouble(),
-                    (float)random.NextDouble())
-                ));
-                rotationAxis = Vector3.Normalize(rotationAxis);
-
 
                 // Apply base branching angle with divergence randomness
                 float branchingAngle = _branchingAngle * (1f + _divergenceRandomnessFactor * (float)(random.NextDouble() - 0.5f));
@@ -127,6 +135,25 @@ namespace Leap71.ShapeKernel
         {
             if (!_includeLeaves) return;
             lattice.AddSphere(position, radius);
+        }
+        
+        public static Vector3 FindOrthogonalVector(Vector3 i)
+        {
+            // Step 1: Choose an arbitrary vector
+            Vector3 arbitraryVector = Math.Abs(i.X) < 1e-6 ? Vector3.UnitX : Vector3.UnitY;
+
+            // Step 2: Compute the cross product
+            Vector3 j = Vector3.Cross(i, arbitraryVector);
+
+            // Step 3: Handle degenerate cases (if i is aligned with arbitraryVector)
+            if (j.LengthSquared() < 1e-6)
+            {
+                arbitraryVector = Vector3.UnitZ;
+                j = Vector3.Cross(i, arbitraryVector);
+            }
+
+            // Step 4: Normalize the result
+            return Vector3.Normalize(j);
         }
 
 
